@@ -118,3 +118,100 @@ Note: `statusLine` is NOT a valid plugin.json field. It must be configured in se
 
 - **Runtime**: Node.js 18+ or Bun
 - **Build**: TypeScript 5, ES2022 target, NodeNext modules
+
+---
+
+# macworld 贡献者上下文
+
+> 以下内容仅用于 macworld fork 的开发协作，不提交到上游。
+
+## 仓库关系
+
+- **origin**: `macworld/claude-hud`（fork）
+- **upstream**: `jarrodwatts/claude-hud`（上游）
+- 主分支 `main` 保持与 upstream 同步
+- 功能分支 `feat/*` 通过 PR 提交到 upstream
+
+```bash
+# 同步上游
+git fetch upstream && git rebase upstream/main
+
+# 提 PR
+git push origin feat/xxx -u
+gh pr create --repo jarrodwatts/claude-hud --head macworld:feat/xxx --base main
+```
+
+## 本地预览
+
+插件运行缓存在 `~/.claude/plugins/cache/claude-hud/claude-hud/0.0.12/`。同步改动：
+
+```bash
+rsync -a --exclude='.git' --exclude='node_modules' ./ ~/.claude/plugins/cache/claude-hud/claude-hud/0.0.12/
+# 需新建 Claude Code 会话才能看到 statusLine 变化
+```
+
+## 代码规范补充
+
+- `dist/` 不提交 — 上游 CI bot 自动编译
+- 新增用户可见文案需加 i18n（`src/i18n/`，使用 `t()` 函数）
+- Commit 使用 Conventional Commits（`feat / fix / docs`）
+
+## 当前活跃 PR
+
+### #420 — `feat/configurable-max-width`
+- 新增 `maxWidth` config，终端宽度检测失败时的可配 fallback
+- 设计：检测成功时 maxWidth 被忽略（是 fallback 不是 override）
+- Closes #385, #404
+- 改动：`src/config.ts`, `src/render/index.ts` + 测试
+
+### #421 — `feat/usage-compact`
+- 新增 `display.usageCompact`，紧凑用量：`5h: 25% (3h 45m)` 替代 `Usage 5h 25% (resets in 3h 45m)`
+- 额外修复了 `commands/configure.md` 的 Usage Style Mapping 表格（文档与代码不一致）
+- Closes #411
+- 改动：`src/config.ts`, `src/render/session-line.ts`, `src/render/lines/usage.ts`, `commands/configure.md`
+
+## Issue #416 评论记录
+
+在 [#416](https://github.com/jarrodwatts/claude-hud/issues/416) 上分享了终端宽度检测研究：
+
+| 方法 | tmux | zellij | 无 TTY |
+|------|------|--------|--------|
+| `tput cols` | 80（错，默认值） | 正确 | 80（错） |
+| `tmux display-message` | 正确 | N/A | N/A |
+
+- 建议检测链：`tmux display-message || tput cols || echo 0`
+- 根本方案：Claude Code 应传正确 COLUMNS（[anthropics/claude-code#5430](https://github.com/anthropics/claude-code/issues/5430)）
+
+## 本地 HUD 环境
+
+### statusLine 命令（`~/.claude/settings.json`）
+
+注入了 `COLUMNS=$(tmux display-message -p '#{pane_width}')` 让宽度检测在 tmux 下正确工作。tmux `window-size latest` + `aggressive-resize on` 策略使 pane 宽度跟随最近活跃 client 自动调整。
+
+### HUD 配置（`~/.claude/plugins/claude-hud/config.json`）
+
+```json
+{
+  "lineLayout": "compact",
+  "gitStatus": { "enabled": false },
+  "display": {
+    "showModel": false,
+    "showProject": false,
+    "showContextBar": false,
+    "showUsage": true,
+    "usageBarEnabled": false,
+    "usageCompact": true,
+    "showSessionName": true,
+    "showSpeed": true,
+    "showSessionTokens": true,
+    "showDuration": true,
+    "sevenDayThreshold": 0
+  }
+}
+```
+
+## 已知问题
+
+- `tests/core.test.js` 中 `countConfigs cache: miss on nested rules additions` 是上游 flaky test
+- 插件缓存会被插件更新覆盖，需重新 rsync 同步
+- 上游 0.0.11 → 0.0.12 无 release tag，版本在 `.claude-plugin/plugin.json` 管理
